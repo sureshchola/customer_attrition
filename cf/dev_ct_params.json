@@ -1,0 +1,34 @@
+[
+  {
+    "ParameterKey":"CreateNewInstanceProfile",
+    "ParameterValue":false
+  },
+  {
+    "ParameterKey":"SecurityGroupIds",
+    "ParameterValue":"sg-"
+  },
+  {
+    "ParameterKey":"BatchSubnetId1",
+    "ParameterValue": "subnet-"
+  },
+  {
+    "ParameterKey":"BatchSubnetId2",
+    "ParameterValue": "subnet-"
+  },
+  {
+    "ParameterKey":"BatchSubnetId3",
+    "ParameterValue": "subnet-"
+  },
+  {
+    "ParameterKey":"AWSEnvironment",
+    "ParameterValue": "dev"
+  },
+  {
+    "ParameterKey":"ModelName",
+    "ParameterValue": "attrition-model"
+  },
+  {
+    "ParameterKey":"NotebookConfigName",
+    "ParameterValue": "attrition-notebook-config"
+  }
+]

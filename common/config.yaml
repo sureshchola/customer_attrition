@@ -1,0 +1,58 @@
+train:
+  sampling: 'down'
+  split:
+    mode: 'last_n_months'
+    months: 3
+  start_month: '2020-05'
+  max_month: '2021-02'
+  profiling: true
+  rename_cols: 
+    PAYOR_TYPE_Commercial: 'PAYOR_TYPE_COMMERCIAL'
+    PAYOR_TYPE_Generic-Other: 'PAYOR_TYPE_GENERIC_OTHER'
+    PAYOR_TYPE_Managed Medicaid: 'PAYOR_TYPE_MANAGED_MEDICAID' 
+    PAYOR_TYPE_Managed Medicare: 'PAYOR_TYPE_MANAGED_MEDICARE'
+    PAYOR_TYPE_Medicare: 'PAYOR_TYPE_MEDICARE' 
+    PAYOR_TYPE_Pharmacy: 'PAYOR_TYPE_PHARMACY'
+    PAYOR_TYPE_State Medicaid: 'PAYOR_TYPE_STATE_MEDICAID' 
+    PAYOR_TYPE_VA/Military: 'PAYOR_TYPE_VA_MILITARY'
+    DIAGNOSIS_TYPE_TYPE 1: 'DIAGNOSIS_TYPE_TYPE_1' 
+    DIAGNOSIS_TYPE_TYPE 2: 'DIAGNOSIS_TYPE_TYPE_2'
+  features: ['CUSTOMER_ID','MRN', 'MONTH', 'NUM_AGE', 'NUM_YEARS_ON_INSULIN',
+              'IS_AUTO_REORDER_FLAG', 'IS_ATTRITION_FLAG_C','LENGTH_OF_WARRANTY_IN_MONTHS',
+              'IS_WARRANTY_ACTIVE', 'IS_SR', 'NUM_CUM_ACTIVE_MONTH',
+              'NUM_LAST_ORDER_CUM_ACTIVE_MONTHS', 'NUM_IS_RETURNED_SUMLOOKBACK_6M_SCORE', 
+              'NUM_REGULAR_COMPLAINT_LOOKBACK_18M_SCORE', 'NUM_HARM_FLAG_SUM_LOOKBACK_18M_SCORE',
+              'NUM_TOTAL_NOTE_COUNT_LOOKBACK_12M_SCORE', 'NUM_INFUSION_SET_RESIDUAL_ADJ',
+              'PAYOR_TYPE_COMMERCIAL', 'PAYOR_TYPE_GENERIC_OTHER',
+              'PAYOR_TYPE_MANAGED_MEDICAID', 'PAYOR_TYPE_MANAGED_MEDICARE',
+              'PAYOR_TYPE_MEDICARE', 'PAYOR_TYPE_PHARMACY',
+              'PAYOR_TYPE_STATE_MEDICAID', 'PAYOR_TYPE_VA_MILITARY',
+              'DIAGNOSIS_TYPE_TYPE_1', 'DIAGNOSIS_TYPE_TYPE_2']
+  drop: ['CUSTOMER_ID','MRN','MONTH','STAGE']
+  dummy_cols: ['IS_PAYOR_TYPE','IS_DIAGNOSIS_TYPE']
+  target: 'IS_ATTRITION_FLAG_C'
+  hyperparameters:
+    optimize: 'auc'
+    num_tuning_rounds: 3
+    eta:
+      min: -3
+    max_depth:
+      min: 3
+      max: 10
+    subsample:
+      min: 0.5
+      max: 1.0
+    gamma:
+      min: 0
+      max: 5
+    min_child_weight:
+      min: 0
+      max: 5
+    reg_alpha:
+      min: 0
+      max: 5
+
+inference:
+  min_history_months: 6
+  num_month_forecast: 6
+  profiling: true

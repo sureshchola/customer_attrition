@@ -1,0 +1,190 @@
+Metadata:
+  AWSTemplateFormatVersion: "2010-09-09"
+Description: "stack for the diabetes attrition model"
+Parameters:
+  SecurityGroupIds:
+    Type: String
+  CreateNewInstanceProfile:
+    Type: String
+    AllowedValues:
+    - !!bool true
+    - !!bool false
+    Default: !!bool false
+  BatchSubnetId1:
+    Type: String
+  BatchSubnetId2:
+    Type: String
+  BatchSubnetId3:
+    Type: String
+  AWSEnvironment:
+    Type: String
+  ModelName:
+    Type: String
+  NotebookConfigName:
+    Type: String
+Conditions:
+  CreateNewInstanceProfile:
+    Fn::Equals:
+    - ${CreateNewInstanceProfile}
+    - !!bool true
+Resources:
+  GitLabRunnerIAMRole: 
+    Type: AWS::IAM::Role
+    Condition: CreateNewInstanceProfile
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+  NewGitLabRunnerInstanceProfile: 
+    Type: AWS::IAM::InstanceProfile
+    Condition: CreateNewInstanceProfile
+    Properties:
+      Path: /
+      Roles: ${GitLabRunnerIAMRole}
+  IAMRole:
+      Type: "AWS::IAM::Role"
+      Properties:
+        Path: "/service-role/CloudWatchBatchSubmit/"
+        RoleName: "cloudwatch_batch_submit"
+        AssumeRolePolicyDocument: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"events.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+        MaxSessionDuration: 3600
+        Policies:
+        - PolicyName: BatchSubmitJob
+          PolicyDocument: '{"Version":"2012-10-17","Statement":[{"Action":["batch:SubmitJob"],"Resource":"*","Effect":"Allow","Sid":"BatchSumbitJob"}]}'
+        Description: ""
+  IAMRole2:
+      Type: "AWS::IAM::Role"
+      Properties:
+        Path: !Sub "/service-role/SageMakerRole/"
+        RoleName: !Sub "ecsTaskExecutionRole"
+        AssumeRolePolicyDocument: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ecs-tasks.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+        MaxSessionDuration: 3600
+        Policies:
+        - PolicyName: "ecsTaskExecution"
+          PolicyDocument: |
+              {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                      {
+                          "Action": [
+                            "ecr:GetAuthorizationToken",
+                            "ec2:DescribeVpcEndpoints",
+                            "ec2:DescribeDhcpOptions",
+                            "ec2:DescribeVpcs",
+                            "ec2:DescribeSubnets",
+                            "ec2:DescribeSecurityGroups",
+                            "ec2:DescribeNetworkInterfaces",
+                            "ec2:DeleteNetworkInterfacePermission",
+                            "ec2:DeleteNetworkInterface",
+                            "ec2:CreateNetworkInterfacePermission",
+                            "ec2:CreateNetworkInterface",
+                            "iam:GetRole",
+                            "iam:PassRole",
+                            "kms:Decrypt",
+                            "kms:GenerateDataKey",
+                            "cloudwatch:PutMetricData",
+                            "logs:CreateLogGroup",
+                            "logs:CreateLogStream",
+                            "logs:GetLogEvents",
+                            "logs:DescribeLogGroups",
+                            "logs:DescribeLogStreams",
+                            "logs:PutLogEvents",
+                            "s3:CreateBucket",
+                            "s3:GetBucketLocation",
+                            "s3:PutObject",
+                            "s3:GetObject",
+                            "s3:GetEncryptionConfiguration",
+                            "s3:AbortMultipartUpload",
+                            "s3:ListMultipartUploadParts",
+                            "s3:ListBucket",
+                            "s3:ListBucketMultipartUploads",
+                            "sagemaker:CreateEndpoint",
+                            "sagemaker:CreateEndpointConfig",
+                            "sagemaker:CreateModel",
+                            "sagemaker:CreateTrainingJob",
+                            "sagemaker:DescribeTrainingJob",
+                            "sagemaker:DescribeEndpoint",
+                            "sagemaker:DeleteEndpoint",
+                            "sagemaker:DeleteEndpointConfig",
+                            "sagemaker:UpdateEndpoint",
+                            "sagemaker:ListEndpoints",
+                            "sagemaker:ListEndpointConfigs",
+                            "sagemaker:DescribeEndpointConfig",
+                            "sagemaker:InvokeEndpoint",
+                            "secretsmanager:GetSecretValue",
+                            "sts:GetCallerIdentity",
+                            "SNS:Publish"
+                          ],
+                          "Resource": "*",
+                          "Effect": "Allow",
+                          "Sid": "ecsTaskExecution"
+                      }
+                  ]
+              }
+  
+  BatchJobQueue:
+      Type: "AWS::Batch::JobQueue"
+      DependsOn: [BatchComputeEnvironment]
+      Properties:
+          ComputeEnvironmentOrder: 
+            - 
+              ComputeEnvironment: !Sub "arn:aws:batch:${AWS::Region}:${AWS::AccountId}:compute-environment/batch_compute"
+              Order: 1
+          Priority: 1
+          State: "ENABLED"
+          JobQueueName: "batch_queue"
+  BatchJobDefinition:
+      Type: "AWS::Batch::JobDefinition"
+      DependsOn: [BatchJobQueue,IAMRole2]
+      Properties:
+          JobDefinitionName: "batch_job_def"
+          Type: "container"
+          Parameters: {}
+          RetryStrategy: 
+              Attempts: 1
+          Timeout: 
+              AttemptDurationSeconds: 1800
+          ContainerProperties: 
+              JobRoleArn: !GetAtt IAMRole2.Arn
+              Image: "case.artifacts.medtronic.com/docker-dev-local/${ModelName}/inferencing:latest"
+              ExecutionRoleArn: !GetAtt IAMRole2.Arn
+              Vcpus: 4
+              Memory: 10240
+              LogConfiguration: 
+                  LogDriver: "awslogs"
+                  Options: {}
+  EventsRule:
+      Type: "AWS::Events::Rule"
+      DependsOn: [BatchJobDefinition,IAMRole]
+      Properties:
+          Name: "batch_inferencing_schedule"
+          ScheduleExpression: "cron(0 13 * * ? *)"
+          State: "ENABLED"
+          Targets: 
+            - Id: "randomid"
+              Arn: !Sub "arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-queue/batch_queue"
+              BatchParameters: 
+                  JobDefinition: !Sub "arn:aws:batch:${AWS::Region}:${AWS::AccountId}:job-definition/batch_job_def"
+                  JobName: "inferencing"
+              RoleArn: !GetAtt IAMRole.Arn
+          EventBusName: "default"
+  SNSTopic:
+      Type: "AWS::SNS::Topic"
+      Properties:
+          DisplayName: ""
+          TopicName: "job_notifications"
+  SNSTopicPolicy:
+      Type: "AWS::SNS::TopicPolicy"
+      DependsOn: [SNSTopic]
+      Properties:
+          PolicyDocument: !Sub "{\"Version\":\"2008-10-17\",\"Id\":\"__default_policy_ID\",\"Statement\":[{\"Sid\":\"__default_statement_ID\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":\"*\"},\"Action\":[\"SNS:Publish\",\"SNS:RemovePermission\",\"SNS:SetTopicAttributes\",\"SNS:DeleteTopic\",\"SNS:ListSubscriptionsByTopic\",\"SNS:GetTopicAttributes\",\"SNS:Receive\",\"SNS:AddPermission\",\"SNS:Subscribe\"],\"Resource\":\"${SNSTopic}\",\"Condition\":{\"StringEquals\":{\"AWS:SourceOwner\":\"${AWS::AccountId}\"}}}]}"
+          Topics: 
+            - !Ref SNSTopic
